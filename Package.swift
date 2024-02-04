@@ -12,6 +12,7 @@ let package = Package(
         .target(name: "OpenSSL", dependencies: [
             "ssl",
         ]),
+        .testTarget(name: "OpenSSLTest", dependencies: ["OpenSSL"]),
         .binaryTarget(
             name: "ssl",
             url: "https://github.com/Lakr233/openssl-spm/releases/download/storage.3.2.1/libssl.xcframework.zip",
