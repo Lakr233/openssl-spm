@@ -12,11 +12,10 @@ let package = Package(
         .target(name: "OpenSSL", dependencies: [
             "ssl",
         ]),
-        .testTarget(name: "OpenSSLTest", dependencies: ["OpenSSL"]),
         .binaryTarget(
             name: "ssl",
-            url: "https://github.com/Lakr233/openssl-spm/releases/download/storage.openssl-3.2.0/libssl.xcframework.zip",
-            checksum: "11c5c0392581c55db55296186aaa2b7dca681e9930116e343ef860183293241b"
+            url: "https://github.com/Lakr233/openssl-spm/releases/download/storage.3.3.0/libssl.xcframework.zip",
+            checksum: "1fb58bb47c7439e4fb44bd3c03d1a4fd6de204a545dc9400ebe414a6414795b3"
         ),
     ]
 )
