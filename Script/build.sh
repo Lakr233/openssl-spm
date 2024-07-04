@@ -10,7 +10,18 @@ if [ ! -f .root ]; then
 fi
 
 if [ -z "$1" ]; then
-    OPENSSL_TAG=$(wget -q -O- https://api.github.com/repos/openssl/openssl/releases/latest | jq -r '.tag_name')
+    for i in {1..10}; do
+        OPENSSL_TAG=$(wget -q -O- https://api.github.com/repos/openssl/openssl/releases/latest | jq -r '.tag_name')
+        if [ -n "$OPENSSL_TAG" ]; then
+            break
+        fi
+        sleep 10
+    done
+
+    if [ -z "$OPENSSL_TAG" ]; then
+        echo "[*] failed to get latest openssl tag"
+        exit 1
+    fi
 else
     OPENSSL_TAG=$1
 fi
