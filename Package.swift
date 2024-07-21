@@ -14,8 +14,8 @@ let package = Package(
         ]),
         .binaryTarget(
             name: "ssl",
-            url: "https://github.com/Lakr233/openssl-spm/releases/download/storage.3.3.1/libssl.xcframework.zip",
-            checksum: "353058f309166236d88a390389a30f17036f286741e1ee8b261beb2a5004ac83"
+            url: "https://github.com/Lakr233/openssl-spm/releases/download//libssl.xcframework.zip",
+            checksum: "c881fd74606bcf04acf75a6ad4326461eee92f442142b29ed7913835550d832c"
         ),
     ]
 )
