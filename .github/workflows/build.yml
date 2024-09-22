@@ -30,7 +30,7 @@ jobs:
             exit 0
           fi
 
-          OPENSSL_TAG=$(wget -q -O- https://api.github.com/repos/openssl/openssl/releases/latest | jq -r '.tag_name')
+          OPENSSL_TAG=$(curl -s -L -o /dev/null -w "%{url_effective}\n" https://github.com/openssl/openssl/releases/latest | sed 's|.*/tag/\(.*\)|\1|')
           echo "[*] upstream openssl tag: $OPENSSL_TAG"
 
           # make sure tag is in format openssl-%d.%d.%d
