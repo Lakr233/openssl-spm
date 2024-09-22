@@ -11,7 +11,7 @@ fi
 
 if [ -z "$1" ]; then
     for i in {1..10}; do
-        OPENSSL_TAG=$(wget -q -O- https://api.github.com/repos/openssl/openssl/releases/latest | jq -r '.tag_name')
+        OPENSSL_TAG=$(curl -s -L -o /dev/null -w "%{url_effective}\n" https://github.com/openssl/openssl/releases/latest | sed 's|.*/tag/\(.*\)|\1|')
         if [ -n "$OPENSSL_TAG" ]; then
             break
         fi
