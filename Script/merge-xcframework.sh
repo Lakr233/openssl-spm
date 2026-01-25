@@ -52,9 +52,9 @@ xcodebuild -create-xcframework \
     -output "$XCFRAMEWORK_PATH" \
     "${XCFRAMEWORK_COMMAND[@]}"
 
-pushd ./BinaryTarget > /dev/null
+pushd ./BinaryTarget >/dev/null
 zip -r9 OpenSSL.Package.xcframework.zip OpenSSL.Package.xcframework
-popd > /dev/null
+popd >/dev/null
 
 rm -rf "$XCFRAMEWORK_PATH"
 mv ./BinaryTarget/OpenSSL.Package.xcframework.zip "$OUTPUT_ZIP"

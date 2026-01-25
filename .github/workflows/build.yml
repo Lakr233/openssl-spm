@@ -4,15 +4,15 @@ on:
   workflow_dispatch:
     inputs:
       skip_release:
-        description: 'Build only without creating releases'
+        description: "Build only without creating releases"
         required: false
         type: boolean
         default: false
       openssl_tag:
-        description: 'OpenSSL tag to build (e.g., openssl-3.6.0). Leave empty to auto-detect latest.'
+        description: "OpenSSL tag to build (e.g., openssl-3.6.0). Leave empty to auto-detect latest."
         required: false
         type: string
-        default: ''
+        default: ""
   schedule:
     - cron: "4 5 * * *"
 
@@ -232,7 +232,15 @@ jobs:
           retention-days: 1
 
   merge-and-release:
-    needs: [prepare, build-macos, build-ios, build-tvos, build-watchos, build-visionos]
+    needs:
+      [
+        prepare,
+        build-macos,
+        build-ios,
+        build-tvos,
+        build-watchos,
+        build-visionos,
+      ]
     if: needs.prepare.outputs.update_needed == 'true'
     runs-on: macos-15
     steps:

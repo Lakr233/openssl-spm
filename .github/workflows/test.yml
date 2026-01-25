@@ -1,0 +1,38 @@
+name: Test Build
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 0 * * 0" # Weekly on Sunday at 00:00 UTC
+  push:
+    tags:
+      - "*"
+
+jobs:
+  test:
+    runs-on: macos-15
+    strategy:
+      fail-fast: false
+      matrix:
+        destination:
+          - "generic/platform=macOS"
+          - "generic/platform=macOS,variant=Mac Catalyst"
+          - "generic/platform=iOS"
+          - "generic/platform=iOS Simulator"
+          - "generic/platform=tvOS"
+          - "generic/platform=tvOS Simulator"
+          - "generic/platform=watchOS"
+          - "generic/platform=watchOS Simulator"
+          - "generic/platform=xrOS"
+          - "generic/platform=xrOS Simulator"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Select Xcode
+        run: sudo xcode-select -s /Applications/Xcode_16.2.app
+
+      - name: Build
+        run: |
+          set -o pipefail
+          xcodebuild -scheme OpenSSL -destination "${{ matrix.destination }}" | xcbeautify
