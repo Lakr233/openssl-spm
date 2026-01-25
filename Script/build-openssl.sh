@@ -22,6 +22,11 @@ ARCHS=$5
 MIN_VERSION=$6
 INSTALL_PREFIX=$7
 
+# Convert to absolute path (required by OpenSSL 3.6.0+)
+if [[ "$INSTALL_PREFIX" != /* ]]; then
+    INSTALL_PREFIX="$ROOT_DIR/$INSTALL_PREFIX"
+fi
+
 rm -rf "$INSTALL_PREFIX" || true
 mkdir -p "$INSTALL_PREFIX" || true
 
@@ -186,7 +191,7 @@ do
 done
 IFS=$'\n' HEADER_FILE_LIST=($(sort <<<"${HEADER_FILE_LIST[*]}"))
 
-echo "module ssl {" >> module.modulemap
+echo "module libssl {" >> module.modulemap
 for file in "${HEADER_FILE_LIST[@]}"
 do
   echo "    header \"$file\"" >> module.modulemap

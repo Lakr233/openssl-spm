@@ -1,41 +1,63 @@
-name: Fetch Update and Publish Release
+name: Build OpenSSL
 
 on:
   workflow_dispatch:
+    inputs:
+      skip_release:
+        description: 'Build only without creating releases'
+        required: false
+        type: boolean
+        default: false
+      openssl_tag:
+        description: 'OpenSSL tag to build (e.g., openssl-3.6.0). Leave empty to auto-detect latest.'
+        required: false
+        type: string
+        default: ''
   schedule:
     - cron: "4 5 * * *"
 
+permissions:
+  contents: write
+
 jobs:
-  fetch-and-release:
-    runs-on: macos-14
+  prepare:
+    runs-on: macos-15
+    outputs:
+      update_needed: ${{ steps.check.outputs.update_needed }}
+      build_tag: ${{ steps.tag.outputs.build_tag }}
+      release_tag: ${{ steps.tag.outputs.release_tag }}
+      storage_release_tag: ${{ steps.tag.outputs.storage_release_tag }}
+      skip_release: ${{ github.event.inputs.skip_release || 'false' }}
     steps:
-      - name: Checkout Source Code
-        uses: actions/checkout@v4.2.2
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Determine Release Tag
+        id: tag
         run: |
-          BRANCH_NAME=$(git branch --show-current | tr '[:upper:]' '[:lower:]')
-          echo "[*] branch name: $BRANCH_NAME"
+          # Check if openssl_tag input is provided
+          if [ -n "${{ github.event.inputs.openssl_tag }}" ]; then
+            OPENSSL_TAG="${{ github.event.inputs.openssl_tag }}"
+            echo "[*] using provided openssl tag: $OPENSSL_TAG"
+          else
+            BRANCH_NAME=$(git branch --show-current | tr '[:upper:]' '[:lower:]')
+            echo "[*] branch name: $BRANCH_NAME"
 
-          if [[ $BRANCH_NAME = "openssl"* ]]; then
-            echo "[*] treating branch name as tag!"
-
-            BUILD_TAG=$BRANCH_NAME
-            echo "BUILD_TAG=$BUILD_TAG" >> $GITHUB_ENV
-            RELEASE_TAG=$BRANCH_NAME
-            echo "RELEASE_TAG=$RELEASE_TAG" >> $GITHUB_ENV
-            STORAGE_RELEASE_TAG="storage.$RELEASE_TAG"
-            echo "STORAGE_RELEASE_TAG=$STORAGE_RELEASE_TAG" >> $GITHUB_ENV
-
-            exit 0
+            if [[ $BRANCH_NAME = "openssl"* ]]; then
+              echo "[*] treating branch name as tag!"
+              OPENSSL_TAG=$BRANCH_NAME
+            else
+              OPENSSL_TAG=$(curl -s -L -o /dev/null -w "%{url_effective}\n" https://github.com/openssl/openssl/releases/latest | sed 's|.*/tag/\(.*\)|\1|')
+              echo "[*] upstream openssl tag: $OPENSSL_TAG"
+            fi
           fi
 
-          OPENSSL_TAG=$(curl -s -L -o /dev/null -w "%{url_effective}\n" https://github.com/openssl/openssl/releases/latest | sed 's|.*/tag/\(.*\)|\1|')
-          echo "[*] upstream openssl tag: $OPENSSL_TAG"
-
-          # make sure tag is in format openssl-%d.%d.%d
           if [[ ! $OPENSSL_TAG =~ ^openssl-[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
             echo "[*] invalid openssl tag, skip pipeline: $OPENSSL_TAG"
+            echo "build_tag=" >> $GITHUB_OUTPUT
             exit 0
           fi
 
@@ -46,54 +68,214 @@ jobs:
 
           if [ $MAJOR_VERSION -lt 3 ]; then
             echo "[*] invalid openssl tag, skip pipeline: $OPENSSL_TAG, major version must be >= 3"
+            echo "build_tag=" >> $GITHUB_OUTPUT
             exit 0
           fi
 
           BUILD_TAG=$OPENSSL_TAG
-          echo "BUILD_TAG=$BUILD_TAG" >> $GITHUB_ENV
           RELEASE_TAG="$MAJOR_VERSION.$MINOR_VERSION.$PATCH_VERSION"
-          echo "RELEASE_TAG=$RELEASE_TAG" >> $GITHUB_ENV
           STORAGE_RELEASE_TAG="storage.$RELEASE_TAG"
-          echo "STORAGE_RELEASE_TAG=$STORAGE_RELEASE_TAG" >> $GITHUB_ENV
+
+          echo "build_tag=$BUILD_TAG" >> $GITHUB_OUTPUT
+          echo "release_tag=$RELEASE_TAG" >> $GITHUB_OUTPUT
+          echo "storage_release_tag=$STORAGE_RELEASE_TAG" >> $GITHUB_OUTPUT
 
       - name: Check If Compile Required
+        id: check
         run: |
+          BUILD_TAG="${{ steps.tag.outputs.build_tag }}"
+          STORAGE_RELEASE_TAG="${{ steps.tag.outputs.storage_release_tag }}"
+          SKIP_RELEASE="${{ github.event.inputs.skip_release }}"
+
+          if [ -z "$BUILD_TAG" ]; then
+            echo "[*] no valid build tag, skipping"
+            echo "update_needed=false" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
           echo "[*] wants build tag: $BUILD_TAG"
+
+          # When skip_release is true, always build (for testing)
+          if [ "$SKIP_RELEASE" = "true" ]; then
+            echo "[*] skip_release=true, forcing build for testing"
+            echo "update_needed=true" >> $GITHUB_OUTPUT
+            exit 0
+          fi
 
           git pull --tags
           if git rev-parse "$STORAGE_RELEASE_TAG" >/dev/null 2>&1; then
-              echo "[*] tag $STORAGE_RELEASE_TAG already exists, exiting"
-              echo "UPDATE_NEEDED=false" >> $GITHUB_ENV
+            echo "[*] tag $STORAGE_RELEASE_TAG already exists, exiting"
+            echo "update_needed=false" >> $GITHUB_OUTPUT
           else
-              echo "[*] tag $STORAGE_RELEASE_TAG does not exist, pass to build"
-              echo "UPDATE_NEEDED=true" >> $GITHUB_ENV
+            echo "[*] tag $STORAGE_RELEASE_TAG does not exist, pass to build"
+            echo "update_needed=true" >> $GITHUB_OUTPUT
           fi
 
+  build-macos:
+    needs: prepare
+    if: needs.prepare.outputs.update_needed == 'true'
+    runs-on: macos-15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
       - name: Setup Build
-        if: env.UPDATE_NEEDED == 'true'
         run: |
           uname -a
-          echo "[*] installing dependencies..."
-          brew install libtool autoconf automake pkgconfig coreutils bash zip swiftformat
-          echo "[*] switching xcode version..."
-          sudo xcode-select -s /Applications/Xcode_15.2.app
-          xcode-select -p
-          xcodebuild -version
-          echo "[*] preparing xcode..."
-          xcodebuild -downloadAllPlatforms
+          brew install libtool autoconf automake pkgconfig coreutils bash
 
-      - name: Build If Needed
-        if: env.UPDATE_NEEDED == 'true'
+      - name: Build macOS platforms
         run: |
+          ./Script/build-platform.sh "${{ needs.prepare.outputs.build_tag }}" macos ./build/dest
 
-          echo "[*] build tag: $BUILD_TAG"
-          echo "[*] release tag: $RELEASE_TAG"
-          echo "[*] storage release tag: $STORAGE_RELEASE_TAG"
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-macos
+          path: ./build/dest/
+          retention-days: 1
 
+  build-ios:
+    needs: prepare
+    if: needs.prepare.outputs.update_needed == 'true'
+    runs-on: macos-15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Build
+        run: |
+          uname -a
+          brew install libtool autoconf automake pkgconfig coreutils bash
+
+      - name: Build iOS platforms
+        run: |
+          ./Script/build-platform.sh "${{ needs.prepare.outputs.build_tag }}" ios ./build/dest
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-ios
+          path: ./build/dest/
+          retention-days: 1
+
+  build-tvos:
+    needs: prepare
+    if: needs.prepare.outputs.update_needed == 'true'
+    runs-on: macos-15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Build
+        run: |
+          uname -a
+          brew install libtool autoconf automake pkgconfig coreutils bash
+
+      - name: Build tvOS platforms
+        run: |
+          ./Script/build-platform.sh "${{ needs.prepare.outputs.build_tag }}" tvos ./build/dest
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-tvos
+          path: ./build/dest/
+          retention-days: 1
+
+  build-watchos:
+    needs: prepare
+    if: needs.prepare.outputs.update_needed == 'true'
+    runs-on: macos-15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Build
+        run: |
+          uname -a
+          brew install libtool autoconf automake pkgconfig coreutils bash
+
+      - name: Build watchOS platforms
+        run: |
+          ./Script/build-platform.sh "${{ needs.prepare.outputs.build_tag }}" watchos ./build/dest
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-watchos
+          path: ./build/dest/
+          retention-days: 1
+
+  build-visionos:
+    needs: prepare
+    if: needs.prepare.outputs.update_needed == 'true'
+    runs-on: macos-15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Build
+        run: |
+          uname -a
+          brew install libtool autoconf automake pkgconfig coreutils bash
+
+      - name: Build visionOS platforms
+        run: |
+          ./Script/build-platform.sh "${{ needs.prepare.outputs.build_tag }}" visionos ./build/dest
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-visionos
+          path: ./build/dest/
+          retention-days: 1
+
+  merge-and-release:
+    needs: [prepare, build-macos, build-ios, build-tvos, build-watchos, build-visionos]
+    if: needs.prepare.outputs.update_needed == 'true'
+    runs-on: macos-15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Setup
+        run: |
+          brew install zip swiftformat
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: ./build/dest
+          merge-multiple: true
+
+      - name: List artifacts
+        run: |
+          echo "[*] Downloaded artifacts:"
+          find ./build/dest -type f -name "*.a" | head -20
+
+      - name: Merge XCFramework
+        run: |
+          ./Script/merge-xcframework.sh ./build/dest ./build/libssl.xcframework.zip
+
+      - name: Upload XCFramework artifact
+        if: needs.prepare.outputs.skip_release == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: libssl-xcframework
+          path: ./build/libssl.xcframework.zip
+          retention-days: 7
+
+      - name: Prepare Release
+        if: needs.prepare.outputs.skip_release != 'true'
+        run: |
+          STORAGE_RELEASE_TAG="${{ needs.prepare.outputs.storage_release_tag }}"
           EST_XCFRAMEWORK_DOWNLOAD_URL="https://github.com/${{ github.repository }}/releases/download/$STORAGE_RELEASE_TAG/libssl.xcframework.zip"
           echo "[*] estimated xcframework download url: $EST_XCFRAMEWORK_DOWNLOAD_URL"
 
-          ./Script/build.sh "$BUILD_TAG"
           mv ./build/libssl.xcframework.zip /tmp/libssl.xcframework.zip
           git clean -fdx -f
           git reset --hard
@@ -101,17 +283,20 @@ jobs:
           ./Script/build-manifest.sh libssl.xcframework.zip $EST_XCFRAMEWORK_DOWNLOAD_URL
 
       - name: Commit & Push changes
-        uses: actions-js/push@master
-        if: env.UPDATE_NEEDED == 'true'
-        with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          tags: true
+        if: needs.prepare.outputs.skip_release != 'true'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "chore: autopublish $(date -u +%Y-%m-%dT%H:%M:%SZ)" || echo "No changes to commit"
+          git push
+          git push --tags
 
       - name: Make Storage Release
-        if: env.UPDATE_NEEDED == 'true'
-        uses: softprops/action-gh-release@v0.1.15
+        if: needs.prepare.outputs.skip_release != 'true'
+        uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ env.STORAGE_RELEASE_TAG }}
+          tag_name: ${{ needs.prepare.outputs.storage_release_tag }}
           body: |
             # Updated Release
             This release was made by automation.
@@ -121,15 +306,12 @@ jobs:
             libssl.xcframework.zip
 
       - name: Make Release
-        if: env.UPDATE_NEEDED == 'true'
-        uses: softprops/action-gh-release@v0.1.15
+        if: needs.prepare.outputs.skip_release != 'true'
+        uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ env.RELEASE_TAG }}
+          tag_name: ${{ needs.prepare.outputs.release_tag }}
           body: |
             # Package
             This release was made by automation.
           draft: false
           prerelease: false
-
-      - name: Keepalive Workflow
-        uses: gautamkrishnar/keepalive-workflow@v2
