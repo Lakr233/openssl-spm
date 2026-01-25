@@ -10,10 +10,10 @@ let package = Package(
     ],
     targets: [
         .target(name: "OpenSSL", dependencies: [
-            "ssl",
+            "libssl",
         ]),
         .binaryTarget(
-            name: "ssl",
+            name: "libssl",
             url: "https://github.com/Lakr233/openssl-spm/releases/download/storage.3.5.0/libssl.xcframework.zip",
             checksum: "2ebd61f37266f22c3f99874144251a527e975cba6f4189d0679db6b0ab2ba908"
         ),

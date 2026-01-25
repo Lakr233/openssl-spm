@@ -43,6 +43,9 @@ DELIVERED_PREFIXS=()
 function cleanup {
   echo "[*] removing temp dir: $TEMP_SRC_DIR"
   rm -rf "$TEMP_SRC_DIR" || true
+}
+
+function cleanup_arch_dirs {
   for PREFIX in "${DELIVERED_PREFIXS[@]}"
   do
     echo "[*] removing temp dir: $PREFIX"
@@ -68,7 +71,7 @@ do
 
   USE_MIN_VERSION=true
   if [[ "$EFFECTIVE_PLATFORM_NAME" == "MAC_CATALYST_13_1" ]]; then
-    export CFLAGS="-target $ARCH-apple-ios13.1-macabi -Wno-overriding-t-option"
+    export CFLAGS="-target $ARCH-apple-ios13.1-macabi -Wno-overriding-option"
   fi
   if [[ "$EFFECTIVE_PLATFORM_NAME" == "VISION_NOT_PRO" ]]; then
     export CFLAGS="-target $ARCH-apple-xros$MIN_VERSION"
@@ -159,9 +162,10 @@ do
   USED_LIBS+=("$file")
 done
 echo "[*] merging static libs..."
-libtool -static -o "ssl.a" "${USED_LIBS[@]}"
-file ssl.a
+libtool -static -o "libssl_merged.a" "${USED_LIBS[@]}"
 rm -rf "${USED_LIBS[@]}" || true
+mv "libssl_merged.a" "libssl.a"
+file libssl.a
 popd > /dev/null
 popd > /dev/null
 
@@ -191,6 +195,8 @@ echo "    export *" >> module.modulemap
 echo "}" >> module.modulemap
 find . -type d -empty -delete
 popd > /dev/null
+
+cleanup_arch_dirs
 
 ELAPSED_TIME=$(expr $(date +%s) - $BEGIN_TIME)
 echo "========================================"

@@ -50,7 +50,7 @@ DEST_PREFIX=$(pwd)/build/dest
 ./Script/build-openssl.sh $SOURCE_DIR "xros" "XROS" "VISION_NOT_PRO" "arm64" "1.0" "$DEST_PREFIX/xros"
 ./Script/build-openssl.sh $SOURCE_DIR "xrsimulator" "XRSimulator" "VISION_NOT_PRO_SIMULATOR" "arm64" "1.0" "$DEST_PREFIX/xrsimulator"
 
-TARGET_LIBRARY_NAME="ssl.a"
+TARGET_LIBRARY_NAME="libssl.a"
 XCFRAMEWORK_COMMAND=()
 for TARGET_LIBRARY_PATH in $(find $DEST_PREFIX -name "$TARGET_LIBRARY_NAME")
 do

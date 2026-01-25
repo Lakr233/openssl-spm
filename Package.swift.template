@@ -10,10 +10,10 @@ let package = Package(
     ],
     targets: [
         .target(name: "OpenSSL", dependencies: [
-            "ssl",
+            "libssl",
         ]),
         .binaryTarget(
-            name: "ssl",
+            name: "libssl",
             url: "__DOWNLOAD_URL__",
             checksum: "__CHECKSUM__"
         ),
