@@ -52,9 +52,17 @@ xcodebuild -create-xcframework \
     -output "$XCFRAMEWORK_PATH" \
     "${XCFRAMEWORK_COMMAND[@]}"
 
+echo "[*] Checking symlinks in xcframework..."
+find "$XCFRAMEWORK_PATH" -type l
+
+echo "[*] Packing xcframework with ditto (preserve symlinks)..."
 pushd ./BinaryTarget >/dev/null
-zip -r9 OpenSSL.Package.xcframework.zip OpenSSL.Package.xcframework
+ditto -c -k --sequesterRsrc --keepParent OpenSSL.Package.xcframework OpenSSL.Package.xcframework.zip
 popd >/dev/null
+
+echo "[*] Verifying zip contents..."
+ditto -x -k ./BinaryTarget/OpenSSL.Package.xcframework.zip /tmp/verify-xcframework
+find /tmp/verify-xcframework -type l
 
 rm -rf "$XCFRAMEWORK_PATH"
 mv ./BinaryTarget/OpenSSL.Package.xcframework.zip "$OUTPUT_ZIP"

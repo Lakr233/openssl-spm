@@ -128,11 +128,14 @@ jobs:
         run: |
           ./Script/build-platform.sh "${{ needs.prepare.outputs.build_tag }}" macos ./build/dest
 
+      - name: Pack artifacts with tar (preserve symlinks)
+        run: tar -cvf build-macos.tar -C build/dest .
+
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
           name: build-macos
-          path: ./build/dest/
+          path: build-macos.tar
           retention-days: 1
 
   build-ios:
@@ -152,11 +155,14 @@ jobs:
         run: |
           ./Script/build-platform.sh "${{ needs.prepare.outputs.build_tag }}" ios ./build/dest
 
+      - name: Pack artifacts with tar (preserve symlinks)
+        run: tar -cvf build-ios.tar -C build/dest .
+
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
           name: build-ios
-          path: ./build/dest/
+          path: build-ios.tar
           retention-days: 1
 
   build-tvos:
@@ -176,11 +182,14 @@ jobs:
         run: |
           ./Script/build-platform.sh "${{ needs.prepare.outputs.build_tag }}" tvos ./build/dest
 
+      - name: Pack artifacts with tar (preserve symlinks)
+        run: tar -cvf build-tvos.tar -C build/dest .
+
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
           name: build-tvos
-          path: ./build/dest/
+          path: build-tvos.tar
           retention-days: 1
 
   build-watchos:
@@ -200,11 +209,14 @@ jobs:
         run: |
           ./Script/build-platform.sh "${{ needs.prepare.outputs.build_tag }}" watchos ./build/dest
 
+      - name: Pack artifacts with tar (preserve symlinks)
+        run: tar -cvf build-watchos.tar -C build/dest .
+
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
           name: build-watchos
-          path: ./build/dest/
+          path: build-watchos.tar
           retention-days: 1
 
   build-visionos:
@@ -224,11 +236,14 @@ jobs:
         run: |
           ./Script/build-platform.sh "${{ needs.prepare.outputs.build_tag }}" visionos ./build/dest
 
+      - name: Pack artifacts with tar (preserve symlinks)
+        run: tar -cvf build-visionos.tar -C build/dest .
+
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
           name: build-visionos
-          path: ./build/dest/
+          path: build-visionos.tar
           retention-days: 1
 
   merge-and-release:
@@ -257,12 +272,22 @@ jobs:
       - name: Download all artifacts
         uses: actions/download-artifact@v4
         with:
-          path: ./build/dest
+          path: ./build/tarballs
           merge-multiple: true
+
+      - name: Unpack tar artifacts (restore symlinks)
+        run: |
+          mkdir -p ./build/dest
+          for tarball in ./build/tarballs/*.tar; do
+            echo "Extracting $tarball..."
+            tar -xvf "$tarball" -C ./build/dest
+          done
 
       - name: List artifacts
         run: |
-          echo "[*] Downloaded artifacts:"
+          echo "=== Checking symlinks ==="
+          find ./build/dest -type l | head -20
+          echo "=== Downloaded artifacts ==="
           find ./build/dest -type f -name "*.a" | head -20
 
       - name: Merge XCFramework
