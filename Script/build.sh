@@ -31,7 +31,7 @@ XCFRAMEWORK_PATH_ZIP="$(pwd)/build/libssl.xcframework.zip"
 mkdir -p "$(dirname "$XCFRAMEWORK_PATH_ZIP")"
 echo "[*] output: $XCFRAMEWORK_PATH_ZIP"
 
-./Script/build-xcframework.sh $OPENSSL_TAG $XCFRAMEWORK_PATH_ZIP
+./Script/merge-xcframework.sh $OPENSSL_TAG $XCFRAMEWORK_PATH_ZIP
 ./Script/build-manifest.sh $XCFRAMEWORK_PATH_ZIP
 
 echo "[*] done $(basename $0)"
