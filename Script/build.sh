@@ -30,9 +30,11 @@ echo "[*] building for openssl tag: $OPENSSL_TAG"
 if [ -n "$2" ]; then
     DOWNLOAD_URL=$2
 else
-    REPO_SLUG=$(git config --get remote.origin.url | sed -E 's#(git@github.com:|https://github.com/)([^/]+/[^/.]+)(\.git)?#\2#')
+    DEFAULT_REPO_SLUG="${OPENSSL_SPM_REPO_SLUG:-Lakr233/openssl-spm}"
+    REPO_SLUG=$(git config --get remote.origin.url | sed -E 's#(git@github.com:|https://github.com/|git://github.com/)([^/?]+/[^/.?]+)(\.git)?/?(\?.*)?$#\2#')
     if [ -z "$REPO_SLUG" ]; then
-        REPO_SLUG="Lakr233/openssl-spm"
+        REPO_SLUG="$DEFAULT_REPO_SLUG"
+        echo "[*] warning: failed to determine remote.origin.url, defaulting manifest download repo to $REPO_SLUG"
     fi
     STORAGE_RELEASE_TAG="storage.${OPENSSL_TAG#openssl-}"
     DOWNLOAD_URL="https://github.com/$REPO_SLUG/releases/download/$STORAGE_RELEASE_TAG/libssl.xcframework.zip"
