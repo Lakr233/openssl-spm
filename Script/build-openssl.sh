@@ -170,22 +170,20 @@ file libssl.a
 popd >/dev/null
 popd >/dev/null
 
-# generate module map located at $BUILT_PRODUCTS_DIR/include/openssl/module.modulemap
-pushd "$INSTALL_PREFIX/include/openssl" >/dev/null
+# generate module map located at $INSTALL_PREFIX/include/module.modulemap
+pushd "$INSTALL_PREFIX/include" >/dev/null
 echo "[*] generating module map..."
 HEADER_FILE_LIST=()
-for file in $(find . -type f); do
+for file in $(find openssl -type f -name "*.h"); do
     if grep -q "This file is obsolete; please update your software." "$file"; then
         rm "$file"
         continue
-    fi
-    if [[ "$file" == ./* ]]; then
-        file=${file:2}
     fi
     HEADER_FILE_LIST+=("$file")
 done
 IFS=$'\n' HEADER_FILE_LIST=($(sort <<<"${HEADER_FILE_LIST[*]}"))
 
+rm -f module.modulemap openssl/module.modulemap
 echo "module libssl {" >>module.modulemap
 for file in "${HEADER_FILE_LIST[@]}"; do
     echo "    header \"$file\"" >>module.modulemap
