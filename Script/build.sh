@@ -27,11 +27,33 @@ else
 fi
 echo "[*] building for openssl tag: $OPENSSL_TAG"
 
+if [ -n "$2" ]; then
+    DOWNLOAD_URL=$2
+else
+    DEFAULT_REPO_SLUG="${OPENSSL_SPM_REPO_SLUG:-Lakr233/openssl-spm}"
+    REPO_SLUG=$(git config --get remote.origin.url | sed -E 's#(git@github.com:|https://github.com/|git://github.com/)([^/?]+/[^/.?]+)(\.git)?/?(\?.*)?$#\2#')
+    if [ -z "$REPO_SLUG" ]; then
+        REPO_SLUG="$DEFAULT_REPO_SLUG"
+        echo "[*] warning: failed to determine remote.origin.url, defaulting manifest download repo to $REPO_SLUG"
+    fi
+    STORAGE_RELEASE_TAG="storage.${OPENSSL_TAG#openssl-}"
+    DOWNLOAD_URL="https://github.com/$REPO_SLUG/releases/download/$STORAGE_RELEASE_TAG/libssl.xcframework.zip"
+fi
+echo "[*] manifest download url: $DOWNLOAD_URL"
+
+ARTIFACTS_DIR="$(pwd)/build/dest"
 XCFRAMEWORK_PATH_ZIP="$(pwd)/build/libssl.xcframework.zip"
+rm -rf "$ARTIFACTS_DIR" "$XCFRAMEWORK_PATH_ZIP"
+mkdir -p "$ARTIFACTS_DIR"
 mkdir -p "$(dirname "$XCFRAMEWORK_PATH_ZIP")"
 echo "[*] output: $XCFRAMEWORK_PATH_ZIP"
 
-./Script/build-xcframework.sh $OPENSSL_TAG $XCFRAMEWORK_PATH_ZIP
-./Script/build-manifest.sh $XCFRAMEWORK_PATH_ZIP
+./Script/build-platform.sh "$OPENSSL_TAG" macos "$ARTIFACTS_DIR"
+./Script/build-platform.sh "$OPENSSL_TAG" ios "$ARTIFACTS_DIR"
+./Script/build-platform.sh "$OPENSSL_TAG" tvos "$ARTIFACTS_DIR"
+./Script/build-platform.sh "$OPENSSL_TAG" watchos "$ARTIFACTS_DIR"
+./Script/build-platform.sh "$OPENSSL_TAG" visionos "$ARTIFACTS_DIR"
+./Script/merge-xcframework.sh "$ARTIFACTS_DIR" "$XCFRAMEWORK_PATH_ZIP"
+./Script/build-manifest.sh "$XCFRAMEWORK_PATH_ZIP" "$DOWNLOAD_URL"
 
 echo "[*] done $(basename $0)"
