@@ -23,7 +23,7 @@ Add line to you package.swift dependencies:
 .package(
     name: "OpenSSL",
     url: "https://github.com/Lakr233/openssl-spm.git", 
-    from: "3.2.0"
+    from: "4.0.0"
 )
 ```
 
