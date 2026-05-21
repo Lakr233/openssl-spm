@@ -13,6 +13,11 @@ on:
         required: false
         type: string
         default: ""
+      release_tag:
+        description: "Package release tag to publish (e.g., 4.0.1). Defaults to the OpenSSL version."
+        required: false
+        type: string
+        default: ""
   schedule:
     - cron: "4 5 * * *"
 
@@ -74,6 +79,15 @@ jobs:
 
           BUILD_TAG=$OPENSSL_TAG
           RELEASE_TAG="$MAJOR_VERSION.$MINOR_VERSION.$PATCH_VERSION"
+          if [ -n "${{ github.event.inputs.release_tag }}" ]; then
+            RELEASE_TAG="${{ github.event.inputs.release_tag }}"
+            if [[ ! $RELEASE_TAG =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+              echo "[*] invalid release tag, skip pipeline: $RELEASE_TAG"
+              echo "build_tag=" >> $GITHUB_OUTPUT
+              exit 0
+            fi
+            echo "[*] using package release tag override: $RELEASE_TAG"
+          fi
           STORAGE_RELEASE_TAG="storage.$RELEASE_TAG"
 
           echo "build_tag=$BUILD_TAG" >> $GITHUB_OUTPUT
