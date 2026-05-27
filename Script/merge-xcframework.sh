@@ -44,7 +44,7 @@ rm -rf "$FRAMEWORK_STAGE_DIR" || true
 plist_platform_for_variant() {
     case "$1" in
         macosx) echo "MacOSX" ;;
-        maccatalyst) echo "iPhoneOS" ;;
+        maccatalyst) echo "MacOSX" ;;
         iphoneos) echo "iPhoneOS" ;;
         iphonesimulator) echo "iPhoneSimulator" ;;
         appletvos) echo "AppleTVOS" ;;
@@ -58,6 +58,58 @@ plist_platform_for_variant() {
             exit 1
             ;;
     esac
+}
+
+version_framework_for_variant() {
+    local variant="$1"
+    local framework_path="$2"
+    local version_dir="$framework_path/Versions/A"
+
+    case "$variant" in
+        macosx | maccatalyst) ;;
+        *) return 0 ;;
+    esac
+
+    mkdir -p "$version_dir/Resources"
+    mv "$framework_path/$FRAMEWORK_NAME" "$version_dir/$FRAMEWORK_NAME"
+    mv "$framework_path/Headers" "$version_dir/Headers"
+    mv "$framework_path/Modules" "$version_dir/Modules"
+    mv "$framework_path/Info.plist" "$version_dir/Resources/Info.plist"
+
+    ln -s A "$framework_path/Versions/Current"
+    ln -s Versions/Current/$FRAMEWORK_NAME "$framework_path/$FRAMEWORK_NAME"
+    ln -s Versions/Current/Headers "$framework_path/Headers"
+    ln -s Versions/Current/Modules "$framework_path/Modules"
+    ln -s Versions/Current/Resources "$framework_path/Resources"
+}
+
+verify_deep_framework_layout() {
+    local xcframework_path="$1"
+    local framework_path
+
+    while IFS= read -r -d '' framework_path; do
+        if [ ! -L "$framework_path/$FRAMEWORK_NAME" ] ||
+            [ ! -L "$framework_path/Headers" ] ||
+            [ ! -L "$framework_path/Modules" ] ||
+            [ ! -L "$framework_path/Resources" ] ||
+            [ ! -L "$framework_path/Versions/Current" ] ||
+            [ ! -f "$framework_path/Versions/A/Resources/Info.plist" ]; then
+            echo "[!] invalid deep framework layout: $framework_path"
+            exit 1
+        fi
+    done < <(find "$xcframework_path" \( -path "*/macos-*/$FRAMEWORK_NAME.framework" -o -path "*-maccatalyst/$FRAMEWORK_NAME.framework" \) -type d -print0)
+}
+
+verify_xcframework_zip() {
+    local zip_path="$1"
+    local xcframework_name="$2"
+    local unpack_dir
+
+    unpack_dir=$(mktemp -d)
+    ditto -x -k "$zip_path" "$unpack_dir"
+    verify_deep_framework_layout "$unpack_dir/$xcframework_name"
+    find "$unpack_dir" -type l
+    rm -rf "$unpack_dir"
 }
 
 stage_framework() {
@@ -90,7 +142,7 @@ stage_framework() {
     <key>CFBundleExecutable</key>
     <string>$FRAMEWORK_NAME</string>
     <key>CFBundleIdentifier</key>
-    <string>com.lakr233.openssl-spm.$FRAMEWORK_NAME</string>
+    <string>wiki.qaq.openssl-spm.$FRAMEWORK_NAME</string>
     <key>CFBundleInfoDictionaryVersion</key>
     <string>6.0</string>
     <key>CFBundleName</key>
@@ -108,6 +160,8 @@ stage_framework() {
 </dict>
 </plist>
 EOF
+
+    version_framework_for_variant "$variant" "$framework_path"
 
     XCFRAMEWORK_COMMAND+=("-framework" "$framework_path")
 }
@@ -128,6 +182,8 @@ xcodebuild -create-xcframework \
     -output "$XCFRAMEWORK_PATH" \
     "${XCFRAMEWORK_COMMAND[@]}"
 
+verify_deep_framework_layout "$XCFRAMEWORK_PATH"
+
 echo "[*] Checking symlinks in xcframework..."
 find "$XCFRAMEWORK_PATH" -type l
 
@@ -137,8 +193,7 @@ ditto -c -k --sequesterRsrc --keepParent OpenSSL.Package.xcframework OpenSSL.Pac
 popd >/dev/null
 
 echo "[*] Verifying zip contents..."
-ditto -x -k ./BinaryTarget/OpenSSL.Package.xcframework.zip /tmp/verify-xcframework
-find /tmp/verify-xcframework -type l
+verify_xcframework_zip ./BinaryTarget/OpenSSL.Package.xcframework.zip OpenSSL.Package.xcframework
 
 rm -rf "$XCFRAMEWORK_PATH"
 mv ./BinaryTarget/OpenSSL.Package.xcframework.zip "$OUTPUT_ZIP"
