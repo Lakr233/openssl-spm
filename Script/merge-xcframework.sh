@@ -60,6 +60,29 @@ plist_platform_for_variant() {
     esac
 }
 
+# The lowest OS the staged library was built for, read from its own load
+# commands. Taking it from the binary rather than repeating the numbers in
+# build-platform.sh keeps the two from drifting: the toolchain raises the
+# floor on its own — arm64e forces iOS 14.0 where the build asks for 11.0.
+minimum_os_version_for_library() {
+    local library_path="$1"
+
+    # Two spellings appear side by side: the current LC_BUILD_VERSION carries
+    # "minos", while slices the toolchain still emits the old way — tvOS here —
+    # carry LC_VERSION_MIN_TVOS and "version". Read whichever the object has,
+    # and take the lowest across architectures, since that is the floor the
+    # framework as a whole supports.
+    otool -l "$library_path" 2>/dev/null |
+        awk '
+            /^ *cmd LC_BUILD_VERSION$/ { want = "minos"; next }
+            /^ *cmd LC_VERSION_MIN_/ { want = "version"; next }
+            want == "minos" && /^ *minos / { print $2; want = ""; next }
+            want == "version" && /^ *version / { print $2; want = ""; next }
+        ' |
+        sort -uV |
+        head -n 1
+}
+
 version_framework_for_variant() {
     local variant="$1"
     local framework_path="$2"
@@ -120,8 +143,24 @@ stage_framework() {
     local modules_dir="$framework_path/Modules"
     local headers_dir="$framework_path/Headers"
     local platform
+    local minimum_os_version
+    local minimum_version_key
 
     platform=$(plist_platform_for_variant "$variant")
+    minimum_os_version=$(minimum_os_version_for_library "$library_path")
+    if [ -z "$minimum_os_version" ]; then
+        echo "[!] Could not read a minimum OS version from: $library_path" >&2
+        exit 1
+    fi
+
+    # macOS bundles declare their floor as LSMinimumSystemVersion; every other
+    # platform, Mac Catalyst included, uses MinimumOSVersion. An app that ships
+    # a framework without it is rejected by App Store validation with
+    # ITMS-90360 and ITMS-90530.
+    case "$variant" in
+        macosx) minimum_version_key="LSMinimumSystemVersion" ;;
+        *) minimum_version_key="MinimumOSVersion" ;;
+    esac
 
     rm -rf "$framework_path"
     mkdir -p "$headers_dir" "$modules_dir"
@@ -157,6 +196,8 @@ stage_framework() {
     </array>
     <key>CFBundleVersion</key>
     <string>1</string>
+    <key>$minimum_version_key</key>
+    <string>$minimum_os_version</string>
 </dict>
 </plist>
 EOF
