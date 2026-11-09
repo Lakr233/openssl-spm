@@ -96,13 +96,34 @@ def fake_tool(name, args):
                     target.write_bytes(archive.read(info))
     else:
         source, output = map(Path, args[-2:])
+        mutation = os.environ.get("NOTICE_ARCHIVE_MUTATION")
         with zipfile.ZipFile(output, "w") as archive:
+            if mutation == "root-symlink":
+                link = zipfile.ZipInfo(source.name)
+                link.external_attr = (stat.S_IFLNK | 0o777) << 16
+                archive.writestr(link, str(source.resolve()))
+                return
+            if mutation == "parent-symlink":
+                alias = zipfile.ZipInfo(source.name + "/notice-alias/")
+                alias.external_attr = (stat.S_IFDIR | 0o700) << 16
+                archive.writestr(alias, b"")
             for path in sorted(source.rglob("*")):
                 name = str(path.relative_to(source.parent))
                 info = zipfile.ZipInfo(
                     name + ("/" if path.is_dir() and not path.is_symlink() else "")
                 )
                 info.external_attr = path.lstat().st_mode << 16
+                if mutation == "parent-symlink" and name.endswith(
+                    "/Licenses/openssl-spm"
+                ):
+                    info.filename = name
+                    info.external_attr = (stat.S_IFLNK | 0o777) << 16
+                    archive.writestr(info, "../notice-alias")
+                    continue
+                if mutation == "file-symlink" and name.endswith(
+                    "/Licenses/openssl-spm/LICENSE"
+                ):
+                    info.external_attr = (stat.S_IFLNK | 0o777) << 16
                 if path.is_symlink():
                     archive.writestr(info, os.readlink(path))
                 elif path.is_file():
@@ -235,7 +256,7 @@ class Packaging(unittest.TestCase):
             shutil.copytree(self.notices, base / "Licenses")
         return artifacts
 
-    def merge(self, artifacts):
+    def merge(self, artifacts, *, mutation=""):
         tools = self.root / "tools"
         tools.mkdir()
         for name in ("xcodebuild", "ditto"):
@@ -262,6 +283,7 @@ class Packaging(unittest.TestCase):
         env = os.environ | {
             "PATH": str(tools) + os.pathsep + os.environ["PATH"],
             "XCODEBUILD_MARKER": str(self.marker),
+            "NOTICE_ARCHIVE_MUTATION": mutation,
         }
         result = run(
             "bash",
@@ -315,6 +337,48 @@ class Packaging(unittest.TestCase):
                 self.assertFalse(output.exists())
                 shutil.rmtree(artifacts)
                 shutil.rmtree(self.root / "tools")
+
+    def test_original_zip_notice_symlinks_and_parent_symlinks_are_refused(self):
+        for mutation in ("file-symlink", "parent-symlink"):
+            with self.subTest(mutation=mutation):
+                artifacts = self.artifacts()
+                result, output = self.merge(artifacts, mutation=mutation)
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn("nonregular notice payload", result.stderr)
+                self.assertFalse(output.exists())
+                with zipfile.ZipFile(
+                    self.wrapper / "BinaryTarget/OpenSSL.Package.xcframework.zip"
+                ) as archive:
+                    member = "OpenSSL.Package.xcframework/Licenses/openssl-spm"
+                    if mutation == "file-symlink":
+                        member += "/LICENSE"
+                        self.assertEqual(
+                            archive.read(member), (ROOT / "LICENSE").read_bytes()
+                        )
+                    self.assertTrue(
+                        stat.S_ISLNK(archive.getinfo(member).external_attr >> 16)
+                    )
+                shutil.rmtree(artifacts)
+                shutil.rmtree(self.root / "tools")
+
+    def test_top_xcframework_zip_symlink_cannot_supply_notices_from_outside_extraction(
+        self,
+    ):
+        result, output = self.merge(self.artifacts(), mutation="root-symlink")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("unsafe extracted XCFramework directory", result.stderr)
+        self.assertFalse(output.exists())
+        with zipfile.ZipFile(
+            self.wrapper / "BinaryTarget/OpenSSL.Package.xcframework.zip"
+        ) as archive:
+            self.assertEqual(archive.namelist(), ["OpenSSL.Package.xcframework"])
+            entry = archive.infolist()[0]
+            self.assertTrue(stat.S_ISLNK(entry.external_attr >> 16))
+            target = Path(archive.read(entry).decode())
+            self.assertEqual(
+                target, self.wrapper / "BinaryTarget/OpenSSL.Package.xcframework"
+            )
+            self.assertTrue((target / "Licenses/manifest.json").is_file())
 
 
 if __name__ == "__main__":

@@ -132,6 +132,10 @@ verify_xcframework_zip() {
 
     unpack_dir=$(mktemp -d)
     ditto -x -k "$zip_path" "$unpack_dir"
+    if [ ! -d "$unpack_dir/$xcframework_name" ] || [ -L "$unpack_dir/$xcframework_name" ]; then
+        echo "[!] unsafe extracted XCFramework directory" >&2
+        exit 1
+    fi
     verify_deep_framework_layout "$unpack_dir/$xcframework_name"
     bash "$NOTICES_TOOL" compare "$ARTIFACTS_DIR/macosx/Licenses" "$unpack_dir/$xcframework_name/Licenses"
     find "$unpack_dir" -type l
