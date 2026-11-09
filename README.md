@@ -27,6 +27,14 @@ Add line to you package.swift dependencies:
 )
 ```
 
+## Binary artifact notices
+
+The package wrapper's MIT license is separate from the OpenSSL payload license. New builds include `Licenses/manifest.json` inside `OpenSSL.Package.xcframework`, with the source URL, full Git revision, commit tree, original notice paths and SHA-256 digests for each component. OpenSSL's actual `LICENSE*`, `NOTICE*`, `COPYING*`, `AUTHORS*` and `VERSION.dat` files are copied from the source used for compilation. The wrapper license is retained under its own component directory. Tracked source changes, if present, have an explicit `source_patch` record and sidecar.
+
+The build requires `jq` in addition to the existing Xcode build tools. Each architecture stages its own notice context before compilation. The merge refuses missing, changed or differing contexts across platform slices, and verifies the notices after extracting the final ZIP. This changes newly built artifacts. It does not add provenance to existing release archives.
+
+Run the host-only packaging regression with `uv run Script/test-notices.py`. It uses the actual OpenSSL 3.6.2 notice files and synthetic libraries and Apple tools. It does not compile OpenSSL or validate an Apple SDK build.
+
 ## Credits:
 
 - [https://github.com/DimaRU/Libssh2Prebuild](https://github.com/DimaRU/Libssh2Prebuild)

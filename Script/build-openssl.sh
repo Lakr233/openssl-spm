@@ -71,6 +71,7 @@ for ARCH in $ARCHS; do
     PREFIX_DIR="$INSTALL_PREFIX.$ARCH"
     rm -rf "$PREFIX_DIR" || true
     mkdir -p "$PREFIX_DIR" || true
+    bash "$ROOT_DIR/Script/package-notices.sh" stage "$SOURCE_DIR" "$PREFIX_DIR/Licenses"
 
     USE_MIN_VERSION=true
     if [[ "$EFFECTIVE_PLATFORM_NAME" == "MAC_CATALYST_13_1" ]]; then
@@ -139,6 +140,10 @@ echo "[*] install prefix: $INSTALL_PREFIX"
 
 echo "[*] copying header from: ${ARCHS%% *}"
 cp -r "${DELIVERED_PREFIXS[0]}/include" "$INSTALL_PREFIX/include"
+for PREFIX in "${DELIVERED_PREFIXS[@]}"; do
+    bash "$ROOT_DIR/Script/package-notices.sh" compare "${DELIVERED_PREFIXS[0]}/Licenses" "$PREFIX/Licenses"
+done
+cp -R "${DELIVERED_PREFIXS[0]}/Licenses" "$INSTALL_PREFIX/Licenses"
 
 echo "[*] searching for static libs..."
 STATIC_LIBS=()
