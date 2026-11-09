@@ -15,6 +15,7 @@ fi
 
 ARTIFACTS_DIR=$1
 OUTPUT_ZIP=$2
+NOTICES_TOOL="$(pwd)/Script/package-notices.sh"
 
 if [ -z "$ARTIFACTS_DIR" ] || [ -z "$OUTPUT_ZIP" ]; then
     echo "Usage: $0 <artifacts_dir> <output_zip>"
@@ -32,6 +33,7 @@ for platform in $REQUIRED_PLATFORMS; do
         exit 1
     fi
     echo "[*] Found platform: $platform"
+    bash "$NOTICES_TOOL" compare "$ARTIFACTS_DIR/macosx/Licenses" "$ARTIFACTS_DIR/$platform/Licenses"
 done
 
 TARGET_LIBRARY_NAME="libssl.a"
@@ -131,6 +133,7 @@ verify_xcframework_zip() {
     unpack_dir=$(mktemp -d)
     ditto -x -k "$zip_path" "$unpack_dir"
     verify_deep_framework_layout "$unpack_dir/$xcframework_name"
+    bash "$NOTICES_TOOL" compare "$ARTIFACTS_DIR/macosx/Licenses" "$unpack_dir/$xcframework_name/Licenses"
     find "$unpack_dir" -type l
     rm -rf "$unpack_dir"
 }
@@ -224,6 +227,8 @@ xcodebuild -create-xcframework \
     "${XCFRAMEWORK_COMMAND[@]}"
 
 verify_deep_framework_layout "$XCFRAMEWORK_PATH"
+bash "$NOTICES_TOOL" verify "$ARTIFACTS_DIR/macosx/Licenses"
+cp -R "$ARTIFACTS_DIR/macosx/Licenses" "$XCFRAMEWORK_PATH/Licenses"
 
 echo "[*] Checking symlinks in xcframework..."
 find "$XCFRAMEWORK_PATH" -type l
